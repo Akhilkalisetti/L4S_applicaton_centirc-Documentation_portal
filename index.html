@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Industrial AR Overview</title>
+  <meta name="description" content="ns-3 study of utility-aware congestion control for Industrial AR traffic over an L4S/Classic DualPI2 dual-queue bottleneck.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="docs-layout">
+<aside class="docs-nav" id="sidebar" aria-label="Documentation"></aside>
+<main class="docs-content">
+  <section id="introduction">
+    <h1>Industrial AR traffic over an L4S dual-queue bottleneck</h1>
+    <p class="lead-doc">An ns-3 simulation study. Four industrial augmented-reality applications share a 10&nbsp;Mbps DualPI2 (L4S + Classic) bottleneck. We test whether giving each application a utility weight in its congestion control lets the network favour the traffic that matters most, including when those priorities change during a task.</p>
+    <div class="kv">
+      <div><span>Simulator</span><b>ns-3 (Waf), DualPI2 queue disc</b></div>
+      <div><span>L4S sender</span><b>TcpDctcp (proxy for TCP Prague)</b></div>
+      <div><span>Experiments</span><b>E1 equal · E2 fixed · E3 dynamic</b></div>
+      <div><span>Bottleneck</span><b>10 Mbps · 10 ms</b></div>
+      <div><span>Run length</span><b>100 s per experiment</b></div>
+      <div><span>Source code</span><b><a href="https://github.com/Akhilkalisetti/L4S_applicaton_centirc-Documentation_portal" target="_blank" rel="noopener">GitHub repository ↗</a></b></div>
+    </div>
+    <p>Where to go next: the <a href="documentation.html">User guide</a> explains how to build, run and analyse the scenario, and <a href="results.html">Results</a> covers every measurement and all 35 figures.</p>
+  </section>
+
+  <section id="objectives">
+      <h2>Project objectives</h2>
+      <p class="section-intro">The project builds a reproducible simulation testbed and uses it to answer one question: does application-aware weighting of the L4S congestion response improve how a shared bottleneck serves industrial AR workloads?</p>
+      <div class="grid grid-3">
+        <div class="card"><div class="num">1</div><h3>Model the workload</h3><p>Represent an industrial AR session as four concurrent flows: remote video, 3D work instructions, sensor telemetry and maintenance logs, each with a realistic offered load.</p></div>
+        <div class="card"><div class="num">2</div><h3>Build the bottleneck</h3><p>Place the flows behind an L4S/Classic DualPI2 coupled queue in ns-3 and instrument it for queue occupancy, sojourn time, ECN marks and drops.</p></div>
+        <div class="card"><div class="num">3</div><h3>Add utility weights</h3><p>Extend the ECN-based congestion response so each flow's reaction to marking is scaled by an application utility weight between 0 and 1.</p></div>
+        <div class="card"><div class="num">4</div><h3>Compare policies</h3><p>Run three experiments (equal weights, fixed weights, and weights that change with the operator's activity) under identical conditions.</p></div>
+        <div class="card"><div class="num">5</div><h3>Measure what matters</h3><p>Report per-application throughput, satisfaction, p95/p99 delay, jitter, ECN marking, queue occupancy and a weighted utility score.</p></div>
+        <div class="card"><div class="num">6</div><h3>Stay reproducible</h3><p>Ship the scenario, analysis and plotting scripts so every number and figure can be regenerated from one set of commands.</p></div>
+      </div>
+  </section>
+
+  <section id="problem">
+      <h2>Problem statement</h2>
+      <div class="grid grid-2">
+        <div>
+          <p>Industrial AR headsets stream video to a remote expert, pull 3D overlays, report machine sensors and upload logs, all over the same wireless or access link. These flows matter differently, and how much each one matters <strong>changes with the task</strong>: during remote assistance the video is critical, during component inspection the 3D instructions are, and during an overheating alarm the sensor feed is.</p>
+          <p>L4S (Low Latency, Low Loss, Scalable throughput) with a DualPI2 coupled queue keeps queueing delay very low for scalable, ECN-capable flows. But L4S congestion controllers treat every flow the same: each backs off by the same rule when packets are marked. The network has no way to know that one flow is more important than another right now.</p>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0">Research question</h3>
+          <p>If each flow's congestion response is weighted by an application utility, and those utilities follow the operator's current activity, does the bottleneck deliver better weighted application satisfaction than equal-weight L4S, without giving up its latency benefits?</p>
+          <h4>Why it is hard</h4>
+          <ul>
+            <li>Bandwidth is scarce: offered load is about 15&nbsp;Mbps on a 10&nbsp;Mbps link.</li>
+            <li>Priorities shift mid-session, so a fixed weighting is not enough.</li>
+            <li>Changing the response must not raise queueing delay or loss.</li>
+          </ul>
+        </div>
+      </div>
+  </section>
+
+  <section id="methodology">
+      <h2>Methodology</h2>
+      <p class="section-intro">Everything runs in ns-3 (Waf build). A single scenario program, <code>industrial-ar-dualq</code>, takes an <code>--experiment</code> flag and writes all metrics to CSV and FlowMonitor XML, which Python scripts then merge and plot.</p>
+
+      <h3>Simulation topology</h3>
+      <div class="diagram" role="img" aria-label="The AR client sends four TCP flows through its DualPI2 egress queue (L4S and Classic sub-queues) over a 10 Mbps, 10 ms bottleneck to a router, which forwards them over a 1 Gbps LAN to four application servers.">
+        <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-size="13">
+            <rect class="box" x="20" y="95" width="150" height="70" rx="8"/><text x="95" y="125" text-anchor="middle" font-weight="600">AR client</text><text class="muted" x="95" y="145" text-anchor="middle" font-size="11">4 TcpDctcp senders</text>
+            <path class="line" d="M170 130 H195" stroke-width="2"/>
+            <rect class="box" x="195" y="95" width="230" height="70" rx="8"/>
+            <text x="310" y="88" text-anchor="middle" font-weight="600">Client egress · DualPI2 qdisc</text>
+            <rect class="l4s" x="210" y="105" width="200" height="22" rx="4"/><text x="310" y="121" text-anchor="middle" font-size="12">L4S queue (ECT(1), 1 ms mark)</text>
+            <rect class="classic" x="210" y="133" width="200" height="22" rx="4"/><text x="310" y="149" text-anchor="middle" font-size="12">Classic queue (PI²)</text>
+            <path class="line bneck" d="M425 130 H560" stroke-width="5"/>
+            <text x="492" y="118" text-anchor="middle" font-weight="600">Bottleneck</text>
+            <text class="muted" x="492" y="152" text-anchor="middle" font-size="12">10 Mbps · 10 ms</text>
+            <rect class="box" x="560" y="105" width="90" height="50" rx="8"/><text x="605" y="135" text-anchor="middle" font-weight="600">Router</text>
+            <path class="line" d="M650 130 H690" stroke-width="2"/>
+            <text class="muted" x="670" y="185" text-anchor="middle" font-size="11">CSMA LAN</text>
+            <text class="muted" x="670" y="200" text-anchor="middle" font-size="11">1 Gbps</text>
+            <path class="line" d="M690 40 V220 M690 40 H710 M690 100 H710 M690 160 H710 M690 220 H710" stroke-width="2"/>
+            <rect class="box" x="710" y="20" width="170" height="40" rx="6"/><text x="795" y="45" text-anchor="middle">Video server</text>
+            <rect class="box" x="710" y="80" width="170" height="40" rx="6"/><text x="795" y="105" text-anchor="middle">3D instructions server</text>
+            <rect class="box" x="710" y="140" width="170" height="40" rx="6"/><text x="795" y="165" text-anchor="middle">Sensor server</text>
+            <rect class="box" x="710" y="200" width="170" height="40" rx="6"/><text x="795" y="225" text-anchor="middle">Logs server</text>
+          </g>
+        </svg>
+      </div>
+
+      <h3>Application workload</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Application</th><th class="r">Offered load</th><th>Traffic pattern</th><th>Role in the AR task</th></tr></thead>
+        <tbody>
+          <tr><td>Remote video</td><td class="r">8 Mbps</td><td>Continuous TCP, 8 Mbps</td><td>Live view shared with a remote expert</td></tr>
+          <tr><td>3D instructions</td><td class="r">4 Mbps</td><td>On/off (0.5 s on, 0.5 s off at 8 Mbps)</td><td>Overlays and CAD models for the task</td></tr>
+          <tr><td>Sensors</td><td class="r">0.041 Mbps</td><td>256 B packets at 40.96 kbps</td><td>Machine telemetry and alarms</td></tr>
+          <tr><td>Maintenance logs</td><td class="r">3 Mbps</td><td>Continuous TCP, 3 Mbps</td><td>Background upload</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Utility-weighted congestion response</h3>
+      <p>The ns-3 checkout has no TCP Prague or Accurate ECN, so <code>TcpDctcp</code> is used as the ECN-capable L4S proxy. On each window reduction, the measured marking fraction <em>p</em> is mapped through the application utility <em>A</em> before DCTCP cuts its window:</p>
+      <pre><code>p' = p / (A + (1 − A)·p)          // A = application utility (0, 1]
+cwnd ← max( (1 − p'/2) · cwnd , 2·MSS )</code></pre>
+      <p>With <em>A</em>&nbsp;=&nbsp;1 this is plain DCTCP. A flow with a higher utility reacts more gently to the same marking and keeps a larger share; a low-utility flow backs off harder. Utilities are set per socket at run time through <code>TcpSocketBase::SetCongestionControlUtility</code>.</p>
+
+      <h3>Experiments</h3>
+      <div class="grid grid-3">
+        <div class="card"><h4>E1 · Equal utility</h4><p>Every flow uses utility 1.0 for the whole run. This is the unmodified DCTCP baseline.</p></div>
+        <div class="card"><h4>E2 · Fixed utility</h4><p>Video 0.9, instructions 0.6, sensors 0.5, logs 0.2 for all 100 s (remote-assistance profile).</p></div>
+        <div class="card"><h4>E3 · Dynamic utility</h4><p>Utilities follow the activity schedule below and change at 30, 60 and 80 s.</p></div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Activity</th><th class="r">Video</th><th class="r">3D instr.</th><th class="r">Sensors</th><th class="r">Logs</th></tr></thead>
+        <tbody>
+          <tr><td>0–30 s</td><td>Remote assistance</td><td class="r">0.9</td><td class="r">0.6</td><td class="r">0.5</td><td class="r">0.2</td></tr>
+          <tr><td>30–60 s</td><td>Component inspection</td><td class="r">0.4</td><td class="r">0.9</td><td class="r">0.6</td><td class="r">0.2</td></tr>
+          <tr><td>60–80 s</td><td>Overheating detection</td><td class="r">0.6</td><td class="r">0.5</td><td class="r">0.9</td><td class="r">0.2</td></tr>
+          <tr><td>80–100 s</td><td>Remote assistance</td><td class="r">0.9</td><td class="r">0.6</td><td class="r">0.5</td><td class="r">0.2</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Workflow</h3>
+      <div class="flow">
+        <div class="step"><h4>Build</h4><p><code>./waf configure --enable-examples</code> then <code>./waf build</code></p></div>
+        <div class="step"><h4>Simulate</h4><p>Run E1, E2, E3 for 100 s each with the same seed</p></div>
+        <div class="step"><h4>Trace</h4><p>FlowMonitor, cwnd, queue (10 ms), sojourn and per-app CSVs</p></div>
+        <div class="step"><h4>Analyze</h4><p><code>industrial-ar-analyze.py</code> merges runs into <code>comparison.csv</code></p></div>
+        <div class="step"><h4>Plot</h4><p>Per-experiment and cross-experiment figures</p></div>
+      </div>
+
+      <h3>Metrics</h3>
+      <ul>
+        <li><strong>Satisfaction</strong> per app: <code>min(throughput / offered load, 1)</code>.</li>
+        <li><strong>Weighted utility satisfaction</strong>: satisfaction weighted by each app's time-averaged E3 utility, normalized by the sum of those utilities. The same weights score all three experiments so they are comparable.</li>
+        <li><strong>Delay</strong>: p95/p99 from FlowMonitor histograms; jitter and loss per flow.</li>
+        <li><strong>Network</strong>: ECN marking ratio, drops, aggregate queue occupancy p95, Classic and L4S sojourn p99.</li>
+      </ul>
+  </section>
+
+  
+  <section id="team">
+      <h2>Team</h2>
+      <p class="section-intro">The people behind the project. <!-- Edit names, roles and links below. --></p>
+      <div class="grid grid-3">
+        <div class="card member">
+          <div class="avatar">AK</div>
+          <div>
+            <h4 style="margin:0">Akhil Kalisetti</h4>
+            <div class="role">Project lead · ns-3 simulation &amp; analysis</div>
+            <div class="links"><a href="https://github.com/Akhilkalisetti" target="_blank" rel="noopener">GitHub</a></div>
+          </div>
+        </div>
+        <div class="card member">
+          <div class="avatar">TM</div>
+          <div>
+            <h4 style="margin:0">Team member</h4>
+            <div class="role">Role, e.g. congestion control / results</div>
+            <div class="links"><a href="#">Profile</a></div>
+          </div>
+        </div>
+        <div class="card member">
+          <div class="avatar">TM</div>
+          <div>
+            <h4 style="margin:0">Team member</h4>
+            <div class="role">Role, e.g. documentation / plots</div>
+            <div class="links"><a href="#">Profile</a></div>
+          </div>
+        </div>
+        <div class="card member">
+          <div class="avatar">SV</div>
+          <div>
+            <h4 style="margin:0">Supervisor / guide</h4>
+            <div class="role">Department, institution</div>
+          </div>
+        </div>
+      </div>
+  </section>
+
+  <section id="progress">
+      <h2>Project progress</h2>
+      <div class="grid grid-2">
+        <div>
+          <p style="margin-bottom:6px"><strong>Overall:</strong> 8 of 11 milestones complete</p>
+          <div class="progress-bar" aria-label="73 percent complete"><span style="width:73%"></span></div>
+          <ul class="timeline">
+            <li class="done"><strong>Literature review &amp; problem definition</strong><span class="status">Done</span><p>L4S, DualPI2, DCTCP and utility-based congestion control.</p></li>
+            <li class="done"><strong>ns-3 DualPI2 environment</strong><span class="status">Done</span><p>Dual-queue checkout builds with examples enabled.</p></li>
+            <li class="done"><strong>Industrial AR scenario</strong><span class="status">Done</span><p><code>industrial-ar-dualq.cc</code>: four apps, 10 Mbps bottleneck, full tracing.</p></li>
+            <li class="done"><strong>Utility-weighted DCTCP</strong><span class="status">Done</span><p>Type-2 mark mapping added to <code>TcpDctcp</code>; per-socket utility setter.</p></li>
+            <li class="done"><strong>Experiments E1, E2, E3</strong><span class="status">Done</span><p>Equal, fixed and dynamic utility runs completed.</p></li>
+            <li class="done"><strong>Analysis &amp; plotting pipeline</strong><span class="status">Done</span><p>Analyzer, organizer and three plot scripts.</p></li>
+            <li class="done"><strong>Results write-up</strong><span class="status">Done</span><p>Tables, figures and limitations documented.</p></li>
+            <li class="done"><strong>Public repository &amp; website</strong><span class="status">Done</span><p>Code on GitHub; this documentation portal.</p></li>
+            <li class="doing"><strong>Multi-seed runs &amp; parameter sweeps</strong><span class="status">In progress</span><p>Repeat seeds, vary bottleneck rate and load to test significance.</p></li>
+            <li class="todo"><strong>TCP Prague + Accurate ECN</strong><span class="status">Planned</span><p>Replace the DCTCP proxy with a true L4S sender.</p></li>
+            <li class="todo"><strong>Final report &amp; presentation</strong><span class="status">Planned</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Repository at a glance</h3>
+          <ul>
+            <li><code>src/traffic-control/examples/industrial-ar-dualq.cc</code>: scenario</li>
+            <li><code>src/internet/model/tcp-dctcp.cc</code>: utility mapping</li>
+            <li><code>industrial-ar-analyze.py</code>: merges E1–E3</li>
+            <li><code>industrial-ar-organize.py</code>: per-experiment folders</li>
+            <li><code>industrial-ar-plot*.py</code>: figures</li>
+            <li><code>docs/INSTALL.md</code>: setup guide</li>
+          </ul>
+          <a href="https://github.com/Akhilkalisetti/L4S_applicaton_centirc-Documentation_portal" target="_blank" rel="noopener">Browse the code ↗</a>
+        </div>
+      </div>
+    <div class="pager">
+      <a href="results.html"><small>← Previous</small>Results</a>
+      <a href="documentation.html"><small>Next →</small>User guide</a>
+    </div>
+  </section>
+</main>
+</div>
+
+<script src="assets/nav.js"></script>
+<script src="assets/main.js"></script>
+</body>
+</html>

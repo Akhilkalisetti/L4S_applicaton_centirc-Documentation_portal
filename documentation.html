@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Industrial AR User Guide</title>
+  <meta name="description" content="Installation, usage, experiment definitions, outputs and results for the Industrial AR L4S dual-queue ns-3 project.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="docs-layout">
+  <aside class="docs-nav" id="sidebar" aria-label="Documentation"></aside>
+
+  <article class="docs-content">
+    <section id="overview">
+      <h1>User guide</h1>
+      <h2>Overview</h2>
+      <p>This repository is an ns-3 source checkout with project additions for modeling industrial augmented-reality traffic over an L4S and Classic dual-queue (DualPI2) bottleneck. It contains the simulation scenario, a utility-weighted variant of <code>TcpDctcp</code>, and reusable analysis and plotting utilities.</p>
+      <div class="callout info">The L4S sender is <code>TcpDctcp</code>, used as an ECN-capable proxy. TCP Prague and Accurate ECN are not part of this checkout, so results should be described as DCTCP-based proxy results.</div>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements</h2>
+      <ul>
+        <li>Linux or another platform supported by this ns-3 checkout</li>
+        <li>A C++ compiler and Python 3</li>
+        <li>The build dependencies listed in <code>doc/build.txt</code></li>
+        <li>For plots: Python with <code>matplotlib</code> (and <code>pandas</code>/<code>numpy</code> if your plot scripts need them)</li>
+      </ul>
+    </section>
+
+    <section id="build">
+      <h2>Configure &amp; build</h2>
+      <p>The project uses the Waf build system bundled with ns-3. From the repository root:</p>
+      <pre><code>git clone https://github.com/Akhilkalisetti/L4S_applicaton_centirc-Documentation_portal.git
+cd industrial-ar-l4s-dual-queue-bottleneck-scenario
+./waf configure --enable-examples
+./waf build</code></pre>
+    </section>
+
+    <section id="run">
+      <h2>Run the scenarios</h2>
+      <p>Each experiment is a 100-second run of the <code>industrial-ar-dualq</code> program. Write outputs to a local directory; generated outputs are ignored by Git.</p>
+      <pre><code>mkdir -p results
+./waf --run "industrial-ar-dualq --experiment=E1 --output=results/e1 --pcap=0"
+./waf --run "industrial-ar-dualq --experiment=E2 --output=results/e2 --pcap=0"
+./waf --run "industrial-ar-dualq --experiment=E3 --output=results/e3 --pcap=0"</code></pre>
+    </section>
+
+    <section id="options">
+      <h2>Command-line options</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>--experiment</code></td><td><code>E3</code></td><td>Experiment mode: <code>E1</code> equal, <code>E2</code> fixed, <code>E3</code> dynamic utilities</td></tr>
+          <tr><td><code>--duration</code></td><td><code>100</code></td><td>Simulation duration in seconds</td></tr>
+          <tr><td><code>--bottleneckRate</code></td><td><code>10Mbps</code></td><td>Client–router bottleneck rate</td></tr>
+          <tr><td><code>--bottleneckDelay</code></td><td><code>10ms</code></td><td>Client–router bottleneck one-way delay</td></tr>
+          <tr><td><code>--output</code></td><td><code>industrial-ar</code></td><td>Output prefix for FlowMonitor, CSV and pcap files</td></tr>
+          <tr><td><code>--pcap</code></td><td><code>true</code></td><td>Write pcap traces (use <code>0</code> to disable)</td></tr>
+        </tbody>
+      </table></div>
+      <p>Fixed scenario settings: DualPI2 queue limit 100,000 B, L4S mark threshold 1 ms, LAN 1 Gbps / 10 µs, applications start at 0.1 s and stop one second before the end.</p>
+    </section>
+
+    <section id="experiments">
+      <h2>Experiment definitions</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Experiment</th><th>Controller setting</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>E1</strong></td><td>Utility 1.0 for every flow, entire run</td><td>Equal-utility baseline (unmodified DCTCP)</td></tr>
+          <tr><td><strong>E2</strong></td><td>Video 0.9, instructions 0.6, sensors 0.5, logs 0.2</td><td>Fixed application priorities</td></tr>
+          <tr><td><strong>E3</strong></td><td>Utilities change at 30, 60 and 80 s</td><td>Dynamic, activity-driven priorities</td></tr>
+        </tbody>
+      </table></div>
+      <h3>E3 activity schedule</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Activity</th><th class="r">Video</th><th class="r">3D instr.</th><th class="r">Sensors</th><th class="r">Logs</th></tr></thead>
+        <tbody>
+          <tr><td>0–30 s</td><td>Remote assistance</td><td class="r">0.9</td><td class="r">0.6</td><td class="r">0.5</td><td class="r">0.2</td></tr>
+          <tr><td>30–60 s</td><td>Component inspection</td><td class="r">0.4</td><td class="r">0.9</td><td class="r">0.6</td><td class="r">0.2</td></tr>
+          <tr><td>60–80 s</td><td>Overheating detection</td><td class="r">0.6</td><td class="r">0.5</td><td class="r">0.9</td><td class="r">0.2</td></tr>
+          <tr><td>80–100 s</td><td>Remote assistance</td><td class="r">0.9</td><td class="r">0.6</td><td class="r">0.5</td><td class="r">0.2</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Applications</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Flow</th><th class="r">Offered load</th><th>Generator</th></tr></thead>
+        <tbody>
+          <tr><td>video</td><td class="r">8 Mbps</td><td>OnOff, always on</td></tr>
+          <tr><td>instructions</td><td class="r">4 Mbps avg</td><td>OnOff, 8 Mbps for 0.5 s, off 0.5 s</td></tr>
+          <tr><td>sensors</td><td class="r">40.96 kbps</td><td>OnOff, 256 B packets, always on</td></tr>
+          <tr><td>logs</td><td class="r">3 Mbps</td><td>OnOff, always on</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="congestion">
+      <h2>Utility-weighted DCTCP</h2>
+      <p>The change lives in <code>src/internet/model/tcp-dctcp.cc</code>. DCTCP keeps a running estimate α of the fraction of ECN-marked bytes. Before the window reduction, α is mapped through the flow's utility <em>A</em> (a "type-2" map):</p>
+      <pre><code>double p = std::max (0.0, std::min (1.0, m_alpha));
+double mappedMarkRatio = p / (m_utility + (1.0 - m_utility) * p);
+uint32_t val = (int)((1 - mappedMarkRatio / 2.0) * tcb->m_cWnd);
+tcb->m_cWnd = std::max (val, 2 * tcb->m_segmentSize);</code></pre>
+      <ul>
+        <li><code>A = 1</code>: <em>p'</em> = <em>p</em>, identical to standard DCTCP.</li>
+        <li><code>A &lt; 1</code>: <em>p'</em> &gt; <em>p</em>, so the flow cuts its window harder and yields bandwidth.</li>
+        <li>Default utility is set through the attribute <code>ns3::TcpDctcp::Utility</code>; per-socket changes go through <code>TcpSocketBase::SetCongestionControlUtility()</code>. Utility must be positive.</li>
+      </ul>
+      <p>In the scenario, utilities are applied at 0.11 s (after sockets exist), and for E3 again at 30, 60 and 80 s.</p>
+    </section>
+
+    <section id="outputs">
+      <h2>Output files</h2>
+      <p>For an output prefix such as <code>results/e1</code>, the program writes:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>File</th><th>Contents</th></tr></thead>
+        <tbody>
+          <tr><td><code>*.flowmon</code></td><td>FlowMonitor XML with delay and jitter histograms</td></tr>
+          <tr><td><code>*.applications.csv</code></td><td>Per-application throughput, delay, jitter, loss, utility and satisfaction</td></tr>
+          <tr><td><code>*.network.csv</code></td><td>ECN mark ratio, drops and weighted utility satisfaction</td></tr>
+          <tr><td><code>*.cwnd.csv</code></td><td>Congestion-window transitions per flow</td></tr>
+          <tr><td><code>*.queue.csv</code></td><td>Aggregate queue occupancy sampled every 10 ms</td></tr>
+          <tr><td><code>*.sojourn.csv</code></td><td>Classic and L4S sojourn samples at dequeue</td></tr>
+          <tr><td><code>*.log</code></td><td>Run log including utility changes</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="analysis">
+      <h2>Analysis &amp; plotting</h2>
+      <h3>Combine the three runs</h3>
+      <pre><code>python3 src/traffic-control/examples/industrial-ar-analyze.py \
+  --e1 results/e1 --e2 results/e2 --e3 results/e3 \
+  --output results/comparison.csv</code></pre>
+      <h3>Organize and plot each experiment separately</h3>
+      <pre><code>python3 src/traffic-control/examples/industrial-ar-organize.py \
+  --results results/industrial-ar
+for experiment in E1 E2 E3; do
+  python3 src/traffic-control/examples/industrial-ar-plot-single.py \
+    --results results/industrial-ar/$experiment --experiment $experiment
+done</code></pre>
+      <h3>Cross-experiment and E3-only plots</h3>
+      <pre><code>python3 src/traffic-control/examples/industrial-ar-plot.py --results results/industrial-ar
+python3 src/traffic-control/examples/industrial-ar-plot-e3.py --results results/industrial-ar</code></pre>
+      <p>Every script supports <code>--help</code> for its full options.</p>
+    </section>
+
+    <section id="metrics">
+      <h2>Metric definitions</h2>
+      <ul>
+        <li><strong>Throughput</strong>: application bytes received at the sink over the run.</li>
+        <li><strong>Satisfaction</strong>: <code>min(throughput / offered load, 1)</code>.</li>
+        <li><strong>Weighted utility satisfaction</strong>: each app's satisfaction weighted by its time-averaged E3 utility, divided by the sum of those utilities. The same weights evaluate E1, E2 and E3. Both <code>mean_control_utility</code> and <code>mean_target_utility</code> are kept per app.</li>
+        <li><strong>p95/p99 delay</strong>: histogram-bin estimates from FlowMonitor.</li>
+        <li><strong>ECN marking ratio</strong>: marked packets ÷ packets enqueued at the bottleneck queue.</li>
+        <li><strong>Queue p95</strong>: 95th percentile of 10 ms aggregate occupancy samples.</li>
+        <li><strong>Sojourn p99</strong>: 99th percentile of observed per-packet time in the L4S or Classic queue.</li>
+      </ul>
+    </section>
+
+    <section id="results">
+      <h2>Results summary</h2>
+      <p>The full walkthrough, interactive charts and all 35 figures are on the <a href="results.html">Results &amp; Figures</a> page. Headline numbers:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Metric</th><th class="r">E1 equal</th><th class="r">E2 fixed</th><th class="r">E3 dynamic</th></tr></thead>
+        <tbody>
+          <tr><td>Throughput video / instr. / sensors / logs (Mbps)</td><td class="r">4.149 / 2.403 / 0.049 / 3.065</td><td class="r">5.031 / 2.122 / 0.049 / 2.447</td><td class="r">4.723 / 2.232 / 0.049 / 2.645</td></tr>
+          <tr><td>Weighted utility satisfaction</td><td class="r">0.724</td><td class="r">0.720</td><td class="r">0.722</td></tr>
+          <tr><td>p95 / p99 delay (ms)</td><td class="r">119–120 / 121–122</td><td class="r">134–135 / 137–138</td><td class="r">132–133 / 137–138</td></tr>
+          <tr><td>ECN marking ratio</td><td class="r">20.16%</td><td class="r">16.85%</td><td class="r">16.33%</td></tr>
+          <tr><td>Queue p95 (B) · L4S sojourn p99 (ms)</td><td class="r">4,052 · 5</td><td class="r">18,000 · 19</td><td class="r">16,500 · 19</td></tr>
+          <tr><td>Drops</td><td class="r">0</td><td class="r">0</td><td class="r">0</td></tr>
+        </tbody>
+      </table></div>
+      <div class="fig-strip">
+        <figure><img loading="lazy" src="assets/img/compare/throughput.png" alt="Throughput across experiments"><figcaption><b>Throughput</b>E1 vs E2 vs E3</figcaption></figure>
+        <figure><img loading="lazy" src="assets/img/compare/delay-percentiles.png" alt="Delay percentiles across experiments"><figcaption><b>Delay p95/p99</b>E1 vs E2 vs E3</figcaption></figure>
+        <figure><img loading="lazy" src="assets/img/compare/network-metrics.png" alt="ECN and weighted satisfaction"><figcaption><b>ECN &amp; satisfaction</b>E1 vs E2 vs E3</figcaption></figure>
+        <figure><img loading="lazy" src="assets/img/e3-detail/cwnd.png" alt="E3 congestion windows with utility transitions"><figcaption><b>E3 cwnd</b>Utility transitions</figcaption></figure>
+      </div>
+      <p style="margin-top:16px"><a href="results.html">Full results and all figures →</a></p>
+    </section>
+
+    <section id="limitations">
+      <h2>Limitations</h2>
+      <ul>
+        <li><strong>DCTCP proxy:</strong> no TCP Prague or Accurate ECN in this checkout. Results must not be presented as TCP Prague measurements.</li>
+        <li><strong>Single seed:</strong> each experiment ran once. The numbers describe those runs and carry no measure of variance or significance.</li>
+        <li><strong>One operating point:</strong> a single bottleneck rate, delay and load. Parameter sweeps are needed before generalizing.</li>
+        <li><strong>Histogram percentiles:</strong> FlowMonitor delay percentiles are bin-edge estimates.</li>
+      </ul>
+    </section>
+
+    <section id="glossary">
+      <h2>Glossary</h2>
+      <dl class="glossary">
+        <dt>L4S</dt><dd>Low Latency, Low Loss, Scalable throughput: an IETF architecture (RFC 9330) in which scalable congestion controllers react to frequent ECN marks to keep queues very short.</dd>
+        <dt>DualPI2</dt><dd>A coupled dual-queue AQM (RFC 9332) with an L4S queue and a Classic queue. The two are coupled so that both kinds of traffic share capacity fairly.</dd>
+        <dt>ECN / ECT(1) / CE</dt><dd>Explicit Congestion Notification. Senders mark packets ECT(1) to request the L4S queue; the AQM sets CE (Congestion Experienced) instead of dropping.</dd>
+        <dt>DCTCP</dt><dd>Data Center TCP: cuts its window in proportion to the fraction of marked bytes (α). Used here as the L4S proxy.</dd>
+        <dt>TCP Prague</dt><dd>The reference L4S sender for the public internet. It is not available in this ns-3 checkout.</dd>
+        <dt>Accurate ECN</dt><dd>A TCP feedback extension that reports every CE mark rather than one per RTT. Not available in this checkout.</dd>
+        <dt>Utility (A)</dt><dd>Per-application importance weight in (0, 1] that this project uses to scale the congestion response.</dd>
+        <dt>cwnd</dt><dd>Congestion window: how many bytes a TCP sender may have in flight.</dd>
+        <dt>Sojourn time</dt><dd>Time a packet spends waiting in a queue, from enqueue to dequeue.</dd>
+        <dt>Satisfaction</dt><dd><code>min(received / offered, 1)</code> per application.</dd>
+        <dt>FlowMonitor</dt><dd>ns-3 module that records per-flow packets, delay, jitter and loss.</dd>
+      </dl>
+    </section>
+
+    <section id="faq" class="faq">
+      <h2>FAQ &amp; troubleshooting</h2>
+      <details><summary><code>./waf --run industrial-ar-dualq</code> says the program is not found</summary><p>Examples are off by default. Re-run <code>./waf configure --enable-examples</code>, then <code>./waf build</code>.</p></details>
+      <details><summary>The run aborts with "experiment must be E1, E2, or E3"</summary><p>The value is case-sensitive. Use <code>--experiment=E1</code>, not <code>e1</code>.</p></details>
+      <details><summary>Output files are huge</summary><p>pcap tracing is on by default. Pass <code>--pcap=0</code> to keep only CSV and FlowMonitor outputs.</p></details>
+      <details><summary>Plot scripts fail with <code>ModuleNotFoundError: matplotlib</code></summary><p>Install the plotting dependencies, for example <code>python3 -m pip install matplotlib</code>.</p></details>
+      <details><summary>Why is the Classic queue empty in every plot?</summary><p>All four flows use <code>TcpDctcp</code> with ECT(1), so the DualPI2 classifier puts them all in the L4S queue. Adding a Classic (e.g. Cubic) flow would exercise the coupling.</p></details>
+      <details><summary>Can I change the bottleneck?</summary><p>Yes: <code>--bottleneckRate=20Mbps --bottleneckDelay=5ms</code>. Remember that offered loads are fixed in the scenario, so the level of congestion will change.</p></details>
+      <details><summary>Are these TCP Prague results?</summary><p>No. They are DCTCP-based proxy results and must be described that way.</p></details>
+    </section>
+
+    <section id="layout">
+      <h2>Repository layout</h2>
+      <pre><code>src/traffic-control/examples/
+├── industrial-ar-dualq.cc          # four-application DualPI2 scenario
+├── industrial-ar-experiments.md    # experiment definitions and commands
+├── industrial-ar-analyze.py        # merges per-run metrics into comparison.csv
+├── industrial-ar-organize.py       # arranges outputs into E1/E2/E3 folders
+├── industrial-ar-plot.py           # cross-experiment plots
+├── industrial-ar-plot-single.py    # per-experiment plots
+└── industrial-ar-plot-e3.py        # E3-only plots
+src/internet/model/tcp-dctcp.{h,cc} # utility-weighted DCTCP response
+docs/INSTALL.md                     # prerequisites, build, run
+project-website/                    # this documentation portal
+├── index.html                      # overview, objectives, team, progress
+├── results.html                    # all results and figures
+└── documentation.html              # this page</code></pre>
+    </section>
+
+    <section id="license">
+      <h2>License</h2>
+      <p>The ns-3 codebase is distributed under the GNU GPL version 2. See <code>LICENSE</code> in the repository. Check individual files and upstream ns-3 notices when redistributing modified components.</p>
+      <div class="pager">
+        <a href="index.html"><small>← Previous</small>Overview</a>
+        <a href="results.html"><small>Next →</small>Results</a>
+      </div>
+    </section>
+  </article>
+</div>
+
+<script src="assets/nav.js"></script>
+<script src="assets/main.js"></script>
+</body>
+</html>
